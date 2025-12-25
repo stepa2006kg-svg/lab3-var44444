@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, send_file
-from PIL import Image, ImageDraw, ImageEnhance
+from PIL import Image, ImageDraw, ImageEnhance, ImageFont
 import numpy as np
 import io
 import base64
@@ -78,6 +78,59 @@ def blend_images(image1, image2, blend_level):
     blended_image = Image.fromarray(blended_array)
 
     return blended_image, image2  # Возвращаем и измененное второе изображение
+
+
+def add_watermark(image, text="Вариант 4", opacity=0.5):
+    """
+    Добавление водяного знака на изображение
+    Поворачивает текст на 90 градусов
+    """
+    # Создаем копию изображения
+    watermarked = image.copy()
+
+    # Создаем слой для водяного знака
+    watermark = Image.new('RGBA', watermarked.size, (255, 255, 255, 0))
+    draw = ImageDraw.Draw(watermark)
+
+    # Параметры текста
+    try:
+        # Пробуем использовать шрифт по умолчанию или загрузить стандартный
+        font = ImageFont.truetype("arial.ttf", 100)
+    except IOError:
+        # Если шрифт не найден, используем стандартный
+        font = ImageFont.load_default()
+
+    # Определяем размер текста
+    # Создаем временное изображение для определения размера
+    temp_img = Image.new('RGBA', (1, 1))
+    temp_draw = ImageDraw.Draw(temp_img)
+    bbox = temp_draw.textbbox((0, 0), text, font=font)
+    text_width = bbox[2] - bbox[0]
+    text_height = bbox[3] - bbox[1]
+
+    # Поворачиваем текст на 90 градусов
+    # Создаем отдельное изображение для текста
+    text_img = Image.new('RGBA', (text_width + 100, text_height + 100), (255, 255, 255, 0))
+    text_draw = ImageDraw.Draw(text_img)
+    text_draw.text((50, 50), text, font=font, fill=(255, 255, 255, int(255 * opacity)))
+
+    # Поворачиваем на 90 градусов
+    rotated_text = text_img.rotate(90, expand=True)
+
+    # Размещаем водяной знак в центре
+    x = (watermarked.width - rotated_text.width) // 2
+    y = (watermarked.height - rotated_text.height) // 2
+
+    # Накладываем водяной знак
+    watermark.paste(rotated_text, (x, y), rotated_text)
+
+    # Объединяем с исходным изображением
+    watermarked = Image.alpha_composite(
+        watermarked.convert('RGBA'),
+        watermark
+    )
+
+    return watermarked.convert('RGB')
 
 
 def create_color_histogram(image, title):
@@ -218,6 +271,9 @@ def index():
 
                         # Смешиваем изображения
                         blended_image, resized_image2 = blend_images(image1, image2, blend_level)
+
+                        # Добавляем водяной знак на результирующее изображение
+                        blended_image = add_watermark(blended_image, "Вариант 4", opacity=0.4)
 
                         # Создаем гистограмму для смешанного изображения
                         blended_hist_buf = create_color_histogram(
